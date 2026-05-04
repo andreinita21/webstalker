@@ -81,12 +81,33 @@
           <span class="help">Fastest. Saves the HTML the server returns.</span>
         {% elif mode == 'assets' %}
           <span class="help">Saves the HTML plus stylesheets, scripts, and images served from the same origin.</span>
+        {% elif mode == 'crawl' %}
+          <span class="help">Recursively follows same-origin links from the start URL, like HTTrack. Saves every reached HTML page; the diff shows changes across the whole site. Configure depth and page cap below.</span>
         {% else %}
           <span class="help">Renders the page in headless Chromium so JavaScript-driven content is captured. Requires Playwright.</span>
         {% endif %}
       </span>
     </label>
     {% endfor %}
+  </fieldset>
+
+  <fieldset>
+    <legend>Crawl options</legend>
+    <p class="help" style="margin-bottom: 12px;">
+      Used when scan mode is <strong>Crawl subpages</strong>. Same-origin links only.
+    </p>
+    <div class="field-row">
+      <div class="field">
+        <label for="crawl_max_pages">Max pages</label>
+        <input id="crawl_max_pages" name="crawl_max_pages" type="number" min="1" max="500" value="{{ values.crawl_max_pages }}">
+        <p class="help">Hard cap on how many pages a single scan will fetch. Keep modest to be polite to the target site.</p>
+      </div>
+      <div class="field">
+        <label for="crawl_max_depth">Max depth</label>
+        <input id="crawl_max_depth" name="crawl_max_depth" type="number" min="0" max="5" value="{{ values.crawl_max_depth }}">
+        <p class="help">0 means only the start URL; 1 also follows its links; 2 follows links of those pages, and so on.</p>
+      </div>
+    </div>
   </fieldset>
 
   <fieldset>

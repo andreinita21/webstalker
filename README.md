@@ -1,173 +1,301 @@
+<div align="center">
+
 # WebStalker
 
-A local-only web app for monitoring website changes. It periodically fetches
-your URLs, stores each version as content-addressed blobs in SQLite, and shows
-GitHub-style diffs whenever a page changes.
+**Watch any website for changes. See exactly what changed, when, and how, with a GitHub-style diff.**
 
-- Backend: **FastAPI** (Python 3.11+) with **APScheduler** for periodic jobs.
-- UI: server-rendered **Jinja2** templates with a small CSS file. No Node build.
-- Storage: **SQLite** + a content-addressed blob directory on disk.
-- Scanning: **httpx** for raw HTML, BeautifulSoup for asset extraction, optional
-  **Playwright** for JavaScript-rendered pages.
+A small, local-only web app for monitoring website changes.
+Runs on your own machine. Stores everything in a SQLite database.
+Nothing is sent to a third party.
 
-## Quick start (local)
+[Quick start](#quick-start) ·
+[How it works](#how-it-works) ·
+[Features](#features) ·
+[FAQ](#faq) ·
+[Contributing](#contributing)
+
+</div>
+
+---
+
+## What is WebStalker?
+
+WebStalker is a website-change tracker for people who need to know,
+**precisely**, when a page they care about updates. You give it a URL and a
+schedule. It fetches the page in the background, stores every changed version
+locally, and shows you a diff like the one you'd see in a GitHub pull request.
+
+Useful for:
+
+- Watching competitors' marketing pages, pricing tables, or job listings.
+- Detecting silent updates to terms of service, privacy policies, status pages.
+- Catching defacement, drift, or unintended changes on your own sites.
+- Archiving subpages of a site over time, HTTrack-style, with a built-in diff.
+
+It's intentionally a **local tool**. There is no cloud, no account, no
+multi-tenant database. Open it in your browser at `http://127.0.0.1:8000`.
+
+## Quick start
+
+The fastest way is the bundled launcher script. From a terminal:
 
 ```bash
-git clone <this repo>
+git clone https://github.com/andreinita21/webstalker.git
 cd webstalker
-
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-
-uvicorn webstalker.main:app --reload
+./run.sh
 ```
 
-Open <http://127.0.0.1:8000>.
+`run.sh` will:
 
-The first time the app runs it creates `data/webstalker.db` and `data/blobs/`
-automatically — there is no separate "init database" step.
+1. Find a compatible Python (3.11, 3.12, or 3.13).
+2. Create a private virtual environment in `.venv/`.
+3. Install the dependencies (only the first time, or when they change).
+4. Start the app on `http://127.0.0.1:8000`.
 
-### Optional: Playwright for JS-rendered pages
+Open that URL in your browser. Press <kbd>Ctrl</kbd>+<kbd>C</kbd> in the
+terminal to stop. Re-run `./run.sh` any time, it's safe to run repeatedly.
+
+> **Don't have Python installed?**
+> - **macOS**: `brew install python@3.12`
+>   ([install Homebrew](https://brew.sh) first)
+> - **Ubuntu / Debian**: `sudo apt install python3-venv python3-pip`
+> - **Windows**: install [Python 3.12 from python.org](https://www.python.org/downloads/),
+>   then run `.\run.sh` from Git Bash, or use the Docker option below.
+
+### Run with Docker (no Python needed)
+
+If you have [Docker](https://docs.docker.com/get-docker/) installed:
 
 ```bash
-pip install playwright
-playwright install chromium
-```
-
-Once installed, you can pick **Browser-rendered (Playwright)** as the scan mode
-on a website. If Playwright isn't available, those scans log a clear error.
-
-## Quick start (Docker)
-
-```bash
+git clone https://github.com/andreinita21/webstalker.git
+cd webstalker
 docker compose up --build
 ```
 
-The app binds to `127.0.0.1:8000` on the host and persists data to `./data`.
+Then open `http://127.0.0.1:8000`. Your data is persisted in `./data` on the host.
+
+## Your first scan, in 30 seconds
+
+1. Open `http://127.0.0.1:8000`.
+2. Click **Add website**.
+3. Give it a name and a URL. The defaults (every 1 hour, raw HTML) are fine.
+4. Click **Add website** at the bottom of the form.
+
+WebStalker fetches the page immediately and saves it as **version 1**. From
+then on it re-checks at the interval you chose. Each time the page **really**
+changes, a new version is created and the live activity feed shows what
+happened. You can click any version to see a side-by-side, GitHub-style diff,
+or download the saved snapshot as a ZIP.
+
+## Features
+
+- **GitHub-style diffs** with line numbers, added/removed coloring, and
+  collapsible per-file sections. Big diffs are truncated cleanly with a
+  pointer to the ZIP download.
+- **Smart change detection.** WebStalker normalizes the HTML before comparing
+  so trivial differences don't create new versions. You control which
+  differences count: ignore whitespace, ignore timestamps, ignore selected
+  CSS elements (`#cookie-banner`, `.live-clock`), or ignore arbitrary URL
+  patterns.
+- **Four scan modes:**
+  | Mode | What it captures |
+  | --- | --- |
+  | **Raw HTML** | Just the page returned by the server. Fastest. |
+  | **HTML + assets** | The page plus same-origin CSS, JS, and images. |
+  | **Crawl subpages (HTTrack-style)** | Recursively follows same-origin links from the start URL up to your chosen depth and page cap, storing every reached HTML page. The diff covers the whole site. |
+  | **Browser-rendered (Playwright)** | Fully renders JavaScript-driven pages in headless Chromium. Optional install. |
+- **Live activity feed** powered by Server-Sent Events. Every scan, scheduled
+  or manual, streams to your browser in real time, with status badges that
+  update without a page refresh.
+- **Background scans never get stuck on you.** Close the tab, walk away, the
+  scheduler keeps running. When you return, the recent activity replays and
+  the full history lives in the Logs tab.
+- **Content-addressed storage.** Every captured byte is hashed (SHA-256) and
+  stored once. Two pages with identical content share one blob. Old versions
+  cost nothing to keep.
+- **Manual or scheduled.** Hit **Scan now** on any page, or **Scan all now**
+  on the dashboard, whenever you want a check off-schedule.
+- **Snapshot ZIP download.** Every version exports as a self-contained ZIP
+  with the original HTML, captured assets, and a `metadata.json`.
+- **REST API** for scripting. The whole UI is built on top of a small,
+  well-defined JSON API (see [API reference](#api-reference)).
+- **Keyboard-friendly, light/dark theme**, follows your system preference.
+- **No telemetry, no analytics, no external services.** Everything runs in
+  your local Python process and writes to your local `data/` directory.
+
+## How it works
+
+```
+                ┌─────────────────────────────┐
+                │   Browser  (HTML + SSE)     │
+                └────────────────┬────────────┘
+                                 │ http://127.0.0.1:8000
+                ┌────────────────┴────────────┐
+                │  FastAPI app                │
+                │  ├── Jinja templates        │
+                │  ├── REST API               │
+                │  └── SSE event stream       │
+                └────────────────┬────────────┘
+                                 │
+                ┌────────────────┴────────────┐
+                │  APScheduler (background)   │
+                │  ├── runs scans on a clock  │
+                │  └── runs ad-hoc manual scans│
+                └────────────────┬────────────┘
+                                 │
+                ┌────────────────┴────────────┐
+                │  data/                      │
+                │  ├── webstalker.db (SQLite) │
+                │  └── blobs/                 │
+                │       └── aa/bbcc...        │
+                └─────────────────────────────┘
+```
+
+Each scan does roughly this:
+
+1. Fetch the page (one URL, several URLs for the assets mode, or many for
+   crawl mode).
+2. Normalize the HTML according to the website's ignore rules and hash the
+   result with SHA-256.
+3. Compare the hash with the latest stored version.
+4. If unchanged: append a log entry, no new version.
+5. If changed: store the new bytes (only the parts not already stored) and
+   write a new version with a parent pointer to the previous one.
+
+## Configuration
+
+All settings have sensible defaults. Override them with environment
+variables (see `.env.example`):
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `WEBSTALKER_DATA_DIR` | `data` | Where the SQLite file and blobs live |
+| `WEBSTALKER_BIND_HOST` | `127.0.0.1` | Host the server binds to |
+| `WEBSTALKER_BIND_PORT` | `8000` | Port the server binds to |
+| `WEBSTALKER_REQUEST_TIMEOUT_SECONDS` | `30` | Per-request fetch timeout |
+| `WEBSTALKER_ASSET_TIMEOUT_SECONDS` | `15` | Asset fetch timeout |
+| `WEBSTALKER_MAX_ASSET_SIZE_BYTES` | `5242880` | Per-file size cap (5 MB) |
+| `WEBSTALKER_MAX_ASSETS_PER_PAGE` | `50` | Cap on assets per scan |
+| `WEBSTALKER_USER_AGENT` | `WebStalker/0.1` | Outgoing User-Agent header |
+| `WEBSTALKER_ENABLE_SCHEDULER` | `true` | Set to `false` to run without the background scheduler |
+
+You can put these in a `.env` file at the project root. The app picks them
+up automatically.
 
 ## Tests
 
 ```bash
-pip install -r requirements-dev.txt
-pytest
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/pytest
 ```
 
-The tests stub out HTTP fetching, so no network access is required.
+The tests run fully offline. They use `httpx.MockTransport` to fake HTTP
+responses, so no network access is required.
 
-## Configuration
+## API reference
 
-All settings have sensible defaults and can be overridden via env vars (see
-`.env.example`):
+The HTML UI is a thin layer over a clean REST API.
 
-| Variable | Default | Description |
+| Method | Path | Description |
 | --- | --- | --- |
-| `WEBSTALKER_DATA_DIR` | `data` | Directory for SQLite + blob storage |
-| `WEBSTALKER_BIND_HOST` | `127.0.0.1` | uvicorn host |
-| `WEBSTALKER_BIND_PORT` | `8000` | uvicorn port |
-| `WEBSTALKER_REQUEST_TIMEOUT_SECONDS` | `30` | Per-request fetch timeout |
-| `WEBSTALKER_ASSET_TIMEOUT_SECONDS` | `15` | Asset fetch timeout |
-| `WEBSTALKER_MAX_ASSET_SIZE_BYTES` | `5242880` | Max bytes per asset |
-| `WEBSTALKER_MAX_ASSETS_PER_PAGE` | `50` | Cap on assets per scan |
-| `WEBSTALKER_USER_AGENT` | `WebStalker/0.1` | Outgoing User-Agent |
-| `WEBSTALKER_ENABLE_SCHEDULER` | `true` | Disable to run without background scans |
+| `GET` | `/api/websites` | List all websites |
+| `POST` | `/api/websites` | Add a website (triggers an initial scan) |
+| `GET` | `/api/websites/{id}` | One website |
+| `PUT` | `/api/websites/{id}` | Edit settings |
+| `DELETE` | `/api/websites/{id}` | Delete a website and all its versions |
+| `POST` | `/api/websites/{id}/scan` | Manually scan one website |
+| `POST` | `/api/websites/scan-all` | Manually scan every enabled website |
+| `GET` | `/api/websites/{id}/versions` | List versions, newest first |
+| `GET` | `/api/websites/{id}/logs` | Verification log entries, newest first |
+| `GET` | `/api/versions/{id}` | Version metadata + snapshot entries |
+| `GET` | `/api/versions/{id}/diff` | File-by-file diff against the parent |
+| `GET` | `/api/versions/{id}/download` | ZIP download |
+| `GET` | `/api/events` | Server-Sent Events stream of scan events |
+| `GET` | `/api/events/recent` | JSON snapshot of recent scan events |
 
-## How local version storage works
+OpenAPI docs are available at `http://127.0.0.1:8000/docs` while the app is
+running.
 
-WebStalker uses a Git-inspired layout to keep storage tight:
+## FAQ
 
-- Every file content is hashed with **SHA-256** and stored once at
-  `data/blobs/<aa>/<bbcc...>`. Identical bytes are never duplicated.
-- A **version** row records: website ID, version number, parent version ID,
-  timestamps, the HTTP status, and a `normalized_hash` (the hash used for
-  change detection after applying ignore rules).
-- A **snapshot entry** ties one version to one stored blob, with a path
-  (e.g. `index.html`, `assets/style.css`), the source URL, and content type.
-- A **verification log** is written for every scan attempt — including
-  unchanged scans and errors. Each log links the previous version it compared
-  against and (if applicable) the new version it created.
+**Does WebStalker send my data anywhere?**
+No. It runs on your machine, binds by default to `127.0.0.1` (only your
+laptop can reach it), writes to `./data/`, and has no telemetry. The only
+network calls are the ones it makes to the websites you ask it to watch.
 
-When you download a version's ZIP, WebStalker reassembles the snapshot tree
-from blobs and includes a `metadata.json` with the version metadata.
+**Can I host it for a small team?**
+You can, but it ships with no authentication on purpose. If you expose it
+beyond `127.0.0.1`, put it behind a reverse proxy with auth, or run it
+inside a private network you trust.
 
-### Change detection
+**How big can `data/` get?**
+Each version stores only the bytes that actually changed since the previous
+version (content-addressed blobs), so a site that updates rarely uses very
+little space. A noisy site with many small changes can grow faster, in
+which case raise the ignore rules or shorten the retention later.
 
-Before hashing, the fetched HTML is **normalized** according to the website's
-ignore rules:
+**Can I delete an old version?**
+Right now versions are immutable; deleting a website removes all of its
+versions and the blobs that aren't shared with other websites.
 
-- **Ignore whitespace**: collapse runs of whitespace before comparing.
-- **Ignore CSS selectors**: a list of selectors (one per line) whose matching
-  elements are removed before hashing — useful for live-clock widgets,
-  per-request CSRF tokens, etc.
-- **Ignore URL patterns**: a list of regular expressions that are stripped from
-  the page text — useful for cache-busted asset URLs.
-- **Ignore timestamps**: common timestamp shapes (ISO-8601, "2024-05-04",
-  "12:34", "Thu, 04 May 2024…", unix epochs) are masked.
+**Why can't I scan a JavaScript-heavy page in raw mode?**
+Raw and assets modes only fetch what the server returns. If the page is
+client-side rendered, switch the website's scan mode to **Browser-rendered
+(Playwright)** and install Playwright once:
 
-If the normalized hash matches the latest stored version, no new version is
-created — just a log entry with `result=unchanged`.
+```bash
+.venv/bin/pip install playwright
+.venv/bin/python -m playwright install chromium
+```
 
-## REST API
-
-The HTML UI is built on top of a small REST API:
-
-| Endpoint | Method | Description |
-| --- | --- | --- |
-| `/api/websites` | GET | List all websites |
-| `/api/websites` | POST | Create a website (triggers an initial scan) |
-| `/api/websites/{id}` | GET / PUT / DELETE | CRUD for one website |
-| `/api/websites/{id}/scan` | POST | Manually scan one website |
-| `/api/websites/scan-all` | POST | Manually scan all enabled websites |
-| `/api/websites/{id}/versions` | GET | List versions newest-first |
-| `/api/websites/{id}/logs` | GET | List verification logs newest-first |
-| `/api/versions/{id}` | GET | Version metadata + snapshot entries |
-| `/api/versions/{id}/diff` | GET | File-by-file diff against parent version |
-| `/api/versions/{id}/download` | GET | Download the version as a ZIP |
+**How does the crawl mode (HTTrack-style) decide what to follow?**
+It does a breadth-first walk starting from the URL you provide. It only
+follows links to the **same scheme + host**. It stops at the depth and
+page-cap you set on the website (defaults: 25 pages, depth 2). Non-HTML
+responses are skipped. Each reached page is stored as a separate file in
+the snapshot, so the diff naturally becomes a multi-file diff.
 
 ## Project layout
 
 ```
 webstalker/
-├── webstalker/
-│   ├── main.py              FastAPI app + lifespan + routes wiring
-│   ├── config.py            Settings + paths
-│   ├── db.py                SQLAlchemy engine + session helpers
-│   ├── models.py            ORM models (websites, versions, blobs, logs, ...)
-│   ├── schemas.py           Pydantic request/response schemas
-│   ├── storage.py           Content-addressed blob storage
-│   ├── normalize.py         HTML normalization & ignore rules
-│   ├── interval.py          Verification-interval helpers
-│   ├── scanner.py           Fetch, compare, version creation, locking
-│   ├── scheduler.py         APScheduler integration
-│   ├── diff.py              Unified-diff generation
-│   ├── api/                 REST endpoints
-│   ├── web/                 Server-rendered HTML page routes
-│   ├── templates/           Jinja2 templates
-│   └── static/              CSS
-├── tests/
-├── Dockerfile
-├── docker-compose.yml
-└── requirements.txt
+├── webstalker/             Application package
+│   ├── main.py             FastAPI app, lifespan, route wiring
+│   ├── db.py               SQLAlchemy engine + lightweight migrations
+│   ├── models.py           ORM models (websites, versions, blobs, logs, ...)
+│   ├── schemas.py          Pydantic request/response schemas
+│   ├── storage.py          Content-addressed blob storage
+│   ├── normalize.py        HTML normalization & ignore rules
+│   ├── interval.py         Verification-interval helpers
+│   ├── scanner.py          Fetch, crawl, compare, version creation
+│   ├── scheduler.py        APScheduler integration
+│   ├── events.py           Pub/sub for the live activity stream
+│   ├── diff.py             Unified-diff generation
+│   ├── api/                REST endpoints
+│   ├── web/                Server-rendered HTML page routes
+│   ├── templates/          Jinja2 templates
+│   └── static/             CSS + a small vanilla-JS file
+├── tests/                  pytest suite (offline, deterministic)
+├── run.sh                  One-shot launcher
+├── Dockerfile / docker-compose.yml
+├── PRODUCT.md              Product strategy and design principles
+├── DESIGN.md               Visual system, tokens, components
+└── README.md               (this file)
 ```
 
-## Reliability notes
+## Contributing
 
-- **Concurrent scans of the same website are prevented** with a per-website
-  in-process lock; if a scan is still running, a new request logs an error
-  ("scan already running, skipped") and returns.
-- **HTTP errors and timeouts are logged**; the website's `last_status` becomes
-  `error` and the scheduled cadence continues.
-- **URLs are validated** against `https?://` and stored bounded to 2000 chars.
-- **Blob filenames are derived strictly from sha256 hex** — no user input
-  reaches the filesystem path.
-- **All timestamps are stored as timezone-aware UTC**.
+Bug reports, feature ideas, and pull requests are welcome at
+[github.com/andreinita21/webstalker](https://github.com/andreinita21/webstalker).
+The codebase is intentionally small and easy to read.
 
-## Limitations / extension points
+Before opening a PR, please run the test suite:
 
-- Concurrent scans are coordinated **in-process**. Running multiple worker
-  processes against the same SQLite file would need a DB-backed lock.
-- `git`-style content-addressed storage is on the file blob layer only; the
-  version graph is linear (no branches or merges).
-- Asset capture is opt-in (HTML + same-origin assets) and intentionally
-  conservative (`max_assets_per_page`, `max_asset_size_bytes`). Everything
-  else (3rd-party CDNs, fonts, video) is skipped.
+```bash
+.venv/bin/pytest
+```
+
+## License
+
+This project is provided as-is for personal and internal use. See the
+repository for license details.

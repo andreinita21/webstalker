@@ -32,6 +32,10 @@ class Website(Base):
 
     scan_mode: Mapped[str] = mapped_column(String(20), default="raw", nullable=False)
 
+    # Used only when scan_mode == "crawl".
+    crawl_max_pages: Mapped[int] = mapped_column(Integer, default=25, nullable=False)
+    crawl_max_depth: Mapped[int] = mapped_column(Integer, default=2, nullable=False)
+
     ignore_whitespace: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     ignore_selectors: Mapped[str] = mapped_column(Text, default="", nullable=False)
     ignore_url_patterns: Mapped[str] = mapped_column(Text, default="", nullable=False)

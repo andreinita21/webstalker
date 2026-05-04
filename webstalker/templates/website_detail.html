@@ -204,8 +204,13 @@
     <dd>
       {% if website.scan_mode == 'raw' %}Raw HTML
       {% elif website.scan_mode == 'assets' %}HTML + same-origin assets
+      {% elif website.scan_mode == 'crawl' %}Crawl subpages (HTTrack-style)
       {% else %}Browser-rendered (Playwright){% endif %}
     </dd>
+    {% if website.scan_mode == 'crawl' %}
+    <dt>Crawl limits</dt>
+    <dd>up to <strong>{{ website.crawl_max_pages }}</strong> pages, depth <strong>{{ website.crawl_max_depth }}</strong></dd>
+    {% endif %}
     <dt>Status</dt>
     <dd>{{ "Enabled" if website.enabled else "Disabled" }}</dd>
     <dt>Ignore whitespace</dt><dd>{{ "Yes" if website.ignore_whitespace else "No" }}</dd>

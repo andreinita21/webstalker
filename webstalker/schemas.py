@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-ScanMode = Literal["raw", "assets", "playwright"]
+ScanMode = Literal["raw", "assets", "crawl", "playwright"]
 IntervalUnit = Literal["seconds", "minutes", "hours", "days", "weeks", "months"]
 
 URL_RE = re.compile(r"^https?://[^\s/?#]+(?:[/?#][^\s]*)?$", re.I)
@@ -25,6 +25,8 @@ class WebsiteBase(BaseModel):
     interval_value: int = Field(default=1, ge=1)
     interval_unit: IntervalUnit = "hours"
     scan_mode: ScanMode = "raw"
+    crawl_max_pages: int = Field(default=25, ge=1, le=500)
+    crawl_max_depth: int = Field(default=2, ge=0, le=5)
     ignore_whitespace: bool = True
     ignore_selectors: str = ""
     ignore_url_patterns: str = ""
@@ -47,6 +49,8 @@ class WebsiteUpdate(BaseModel):
     interval_value: int | None = Field(default=None, ge=1)
     interval_unit: IntervalUnit | None = None
     scan_mode: ScanMode | None = None
+    crawl_max_pages: int | None = Field(default=None, ge=1, le=500)
+    crawl_max_depth: int | None = Field(default=None, ge=0, le=5)
     ignore_whitespace: bool | None = None
     ignore_selectors: str | None = None
     ignore_url_patterns: str | None = None
