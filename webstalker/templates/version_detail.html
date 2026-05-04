@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}v{{ version.version_number }} · {{ website.name }} · WebStalker{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div style="min-width: 0;">
+    <p class="breadcrumbs">
+      <a href="/">Dashboard</a>
+      <span class="sep">/</span>
+      <a href="/websites/{{ website.id }}">{{ website.name }}</a>
+      <span class="sep">/</span>
+      <span>v{{ version.version_number }}</span>
+    </p>
+    <h1>
+      Version {{ version.version_number }}
+      {% if version.parent_version_id %}
+        <span class="muted small" style="font-weight: 400;">compared to v{{ version.version_number - 1 }}</span>
+      {% else %}
+        <span class="badge badge-muted">initial</span>
+      {% endif %}
+    </h1>
+    <p class="meta diff-summary">
+      <span class="hash"><span class="mono">{{ version.normalized_hash|short_hash(12) }}</span></span>
+      <button class="copy-btn" data-copy="{{ version.normalized_hash }}" title="Copy full hash">copy hash</button>
+      <span class="dot-sep"></span>
+      <span title="{{ version.created_at|fmt_dt }}">captured {{ version.created_at|ago }}</span>
+      {% if version.http_status %}
+        <span class="dot-sep"></span>
+        <span>HTTP {{ version.http_status }}</span>
+      {% endif %}
+      <span class="dot-sep"></span>
+      <span class="diff-stats"><span class="add">+{{ total_adds }}</span> <span class="del">−{{ total_dels }}</span></span>
+    </p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="/api/versions/{{ version.id }}/download" title="Download a ZIP of the saved HTML, assets, and metadata.json">
+      Download ZIP
+    </a>
+  </div>
+</div>
+
+{% include "partials/diff_panel.html" %}
+
+<details class="file-diff" style="margin-top: 24px;">
+  <summary class="file-diff-header">
+    <span class="path">
+      <svg class="chev" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 2l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      Snapshot files <span class="muted small">({{ entries|length }})</span>
+    </span>
+  </summary>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Path</th>
+        <th>Hash</th>
+        <th class="hide-sm">Source URL</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in entries %}
+      <tr>
+        <td>
+          <span class="mono">{{ e.path }}</span>
+          {% if e.is_primary %}<span class="badge badge-muted badge-plain" style="margin-left: 6px;">primary</span>{% endif %}
+        </td>
+        <td><span class="hash"><span class="mono">{{ e.blob_sha|short_hash(10) }}</span></span></td>
+        <td class="hide-sm"><span class="url-cell truncate truncate-lg" title="{{ e.url or '' }}">{{ e.url or "—" }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</details>
+{% endblock %}

@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit website" if website else "Add website" }} · WebStalker{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <p class="breadcrumbs">
+      <a href="/">Dashboard</a>
+      <span class="sep">/</span>
+      {% if website %}
+        <a href="/websites/{{ website.id }}">{{ website.name }}</a>
+        <span class="sep">/</span>
+        <span>Edit</span>
+      {% else %}
+        <span>Add website</span>
+      {% endif %}
+    </p>
+    <h1>{{ "Edit website" if website else "Add website" }}</h1>
+    {% if website %}
+      <p class="meta mono"><span class="truncate truncate-lg" title="{{ website.url }}">{{ website.url }}</span></p>
+    {% else %}
+      <p class="meta">WebStalker will fetch the page right after you save and store it as version 1.</p>
+    {% endif %}
+  </div>
+</div>
+
+<form method="post"
+      action="{% if website %}/websites/{{ website.id }}/edit{% else %}/websites/new{% endif %}"
+      class="form">
+  <fieldset>
+    <legend>Site</legend>
+
+    <div class="field">
+      <label for="name">Name</label>
+      <input id="name" name="name" type="text" value="{{ values.name }}" required maxlength="200" autocomplete="off" autofocus>
+      <p class="help">A short label you will recognize on the dashboard.</p>
+      {% if errors.name %}<p class="field-error">{{ errors.name }}</p>{% endif %}
+    </div>
+
+    <div class="field">
+      <label for="url">URL</label>
+      <input id="url" name="url" type="url" placeholder="https://example.com/path" value="{{ values.url }}" required maxlength="2000" autocomplete="off">
+      {% if errors.url %}<p class="field-error">{{ errors.url }}</p>{% endif %}
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="interval_value">Check every</label>
+        <input id="interval_value" name="interval_value" type="number" min="1" step="1" value="{{ values.interval_value }}" required>
+        {% if errors.interval_value %}<p class="field-error">{{ errors.interval_value }}</p>{% endif %}
+      </div>
+      <div class="field">
+        <label for="interval_unit">Unit</label>
+        <select id="interval_unit" name="interval_unit">
+          {% for u in INTERVAL_UNITS %}
+            <option value="{{ u }}" {% if values.interval_unit == u %}selected{% endif %}>{{ u }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="checkbox">
+        <input type="checkbox" name="enabled" {% if values.enabled %}checked{% endif %}>
+        <span>
+          Enabled
+          <span class="help">Scheduled scans run while enabled. Manual scans always run regardless.</span>
+        </span>
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Scan mode</legend>
+    {% for mode, label in SCAN_MODES %}
+    <label class="radio">
+      <input type="radio" name="scan_mode" value="{{ mode }}" {% if values.scan_mode == mode %}checked{% endif %}>
+      <span>
+        {{ label }}
+        {% if mode == 'raw' %}
+          <span class="help">Fastest. Saves the HTML the server returns.</span>
+        {% elif mode == 'assets' %}
+          <span class="help">Saves the HTML plus stylesheets, scripts, and images served from the same origin.</span>
+        {% else %}
+          <span class="help">Renders the page in headless Chromium so JavaScript-driven content is captured. Requires Playwright.</span>
+        {% endif %}
+      </span>
+    </label>
+    {% endfor %}
+  </fieldset>
+
+  <fieldset>
+    <legend>Ignore rules</legend>
+    <p class="help" style="margin-bottom: 12px;">
+      WebStalker normalizes the HTML before comparing it. Anything matched here is removed or masked, so it never triggers a new version.
+    </p>
+    <div class="field">
+      <label class="checkbox">
+        <input type="checkbox" name="ignore_whitespace" {% if values.ignore_whitespace %}checked{% endif %}>
+        <span>Ignore whitespace-only changes
+          <span class="help">Recommended. Indentation and blank lines are collapsed before comparing.</span>
+        </span>
+      </label>
+    </div>
+    <div class="field">
+      <label class="checkbox">
+        <input type="checkbox" name="ignore_timestamps" {% if values.ignore_timestamps %}checked{% endif %}>
+        <span>Ignore timestamp-like values
+          <span class="help">Masks ISO-8601 dates, clocks, weekday names, and unix epochs.</span>
+        </span>
+      </label>
+    </div>
+    <div class="field">
+      <label for="ignore_selectors">Ignored CSS selectors</label>
+      <textarea id="ignore_selectors" name="ignore_selectors" rows="3" placeholder=".header-clock&#10;#cookie-banner&#10;[data-csrf]">{{ values.ignore_selectors }}</textarea>
+      <p class="help">One selector per line. Matching elements are removed before hashing.</p>
+    </div>
+    <div class="field">
+      <label for="ignore_url_patterns">Ignored URL patterns</label>
+      <textarea id="ignore_url_patterns" name="ignore_url_patterns" rows="3" placeholder="https?://cdn\.example\.com/v/\d+/.*">{{ values.ignore_url_patterns }}</textarea>
+      <p class="help">One Python regex per line. Matches in the page text are masked. Useful for cache-busted asset URLs.</p>
+    </div>
+  </fieldset>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">{{ "Save changes" if website else "Add website" }}</button>
+    <a class="btn btn-ghost" href="{% if website %}/websites/{{ website.id }}{% else %}/{% endif %}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

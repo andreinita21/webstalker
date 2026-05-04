@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% block title %}{{ website.name }} · WebStalker{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div style="min-width: 0;">
+    <p class="breadcrumbs">
+      <a href="/">Dashboard</a>
+      <span class="sep">/</span>
+      <span>{{ website.name }}</span>
+    </p>
+    <h1>
+      <span style="min-width: 0;" class="truncate truncate-lg" title="{{ website.name }}">{{ website.name }}</span>
+      {% if not website.enabled %}
+        <span class="badge badge-disabled">Disabled</span>
+      {% elif is_scanning %}
+        <span class="badge badge-pending">Scanning</span>
+      {% elif website.last_status == 'pending' %}
+        <span class="badge badge-muted">Pending</span>
+      {% elif website.last_status == 'changed' %}
+        <span class="badge badge-changed">Changed</span>
+      {% elif website.last_status == 'error' %}
+        <span class="badge badge-error">Error</span>
+      {% else %}
+        <span class="badge badge-ok">OK</span>
+      {% endif %}
+    </h1>
+    <p class="meta">
+      <a class="mono" href="{{ website.url }}" target="_blank" rel="noopener noreferrer">
+        <span class="truncate truncate-lg" title="{{ website.url }}">{{ website.url }}</span>
+      </a>
+      <button class="copy-btn" data-copy="{{ website.url }}" title="Copy URL">copy</button>
+    </p>
+    <p class="meta small">
+      <span title="Verification interval">{{ website.interval_value|humanize_interval(website.interval_unit) }}</span>
+      <span class="dot-sep"></span>
+      <span title="{{ website.last_checked_at|fmt_dt }}">last checked {{ website.last_checked_at|ago }}</span>
+      <span class="dot-sep"></span>
+      <span title="{{ website.last_changed_at|fmt_dt }}">last changed {{ website.last_changed_at|ago }}</span>
+    </p>
+  </div>
+  <div class="page-actions">
+    <form method="post" action="/websites/{{ website.id }}/scan" data-scan-form>
+      <button class="btn btn-primary">Scan now</button>
+    </form>
+    <form method="post" action="/websites/{{ website.id }}/toggle">
+      <button class="btn btn-ghost">{{ "Disable" if website.enabled else "Enable" }}</button>
+    </form>
+    <a class="btn btn-ghost" href="/websites/{{ website.id }}/edit">Edit</a>
+    <form method="post" action="/websites/{{ website.id }}/delete"
+          onsubmit="return confirm('Delete “{{ website.name }}” and remove all {{ versions|length }} stored version(s) and log entries? This cannot be undone.');">
+      <button class="btn btn-danger">Delete</button>
+    </form>
+  </div>
+</div>
+
+<nav class="tabs" aria-label="Sections">
+  <a class="tab {% if tab == 'versions' %}active{% endif %}" href="/websites/{{ website.id }}?tab=versions">
+    Versions <span class="tab-count">{{ versions|length }}</span>
+  </a>
+  <a class="tab {% if tab == 'logs' %}active{% endif %}" href="/websites/{{ website.id }}?tab=logs">
+    Logs <span class="tab-count">{{ logs|length }}</span>
+  </a>
+  <a class="tab {% if tab == 'settings' %}active{% endif %}" href="/websites/{{ website.id }}?tab=settings">Settings</a>
+</nav>
+
+{% if tab == 'versions' %}
+  {% if not versions %}
+    <div class="empty compact">
+      <div class="empty-inner">
+        <h2>No versions yet</h2>
+        {% if is_scanning %}
+          <p>The first scan is running now. Refresh this page in a moment, or wait for the dashboard to update.</p>
+        {% elif not website.enabled %}
+          <p>Monitoring is disabled. Enable it, or run a manual scan, to capture the first version.</p>
+          <form method="post" action="/websites/{{ website.id }}/toggle"><button class="btn">Enable</button></form>
+        {% else %}
+          <p>The first scan will capture this URL as version 1. If it has already run and produced an error, see the Logs tab.</p>
+          <form method="post" action="/websites/{{ website.id }}/scan" data-scan-form><button class="btn btn-primary">Scan now</button></form>
+        {% endif %}
+      </div>
+    </div>
+  {% else %}
+    <div class="table-wrap">
+      <div class="scroll-x">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Version</th>
+              <th>Hash</th>
+              <th class="hide-sm">Captured</th>
+              <th class="num hide-sm">HTTP</th>
+              <th class="row-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for v in versions %}
+            <tr>
+              <td>
+                <a href="/versions/{{ v.id }}"><strong>v{{ v.version_number }}</strong></a>
+                {% if v.parent_version_id is none %}
+                  <span class="badge badge-muted" style="margin-left: 6px;">initial</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="hash"><span class="mono">{{ v.normalized_hash|short_hash(10) }}</span></span>
+                <button class="copy-btn" data-copy="{{ v.normalized_hash }}" title="Copy full hash">copy</button>
+              </td>
+              <td class="muted hide-sm" title="{{ v.created_at|fmt_dt }}">{{ v.created_at|ago }}</td>
+              <td class="num hide-sm">{{ v.http_status or "—" }}</td>
+              <td class="row-actions">
+                <a class="btn btn-sm btn-ghost" href="/versions/{{ v.id }}">View diff</a>
+                <a class="btn btn-sm btn-ghost" href="/api/versions/{{ v.id }}/download" title="Download a ZIP containing the captured HTML and metadata.json">ZIP</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+{% endif %}
+
+{% if tab == 'logs' %}
+  {% if not logs %}
+    <div class="empty compact">
+      <div class="empty-inner">
+        <h2>No verification logs yet</h2>
+        <p>Every scan, including unchanged ones, writes a row here once it runs.</p>
+      </div>
+    </div>
+  {% else %}
+    <div class="table-wrap">
+      <div class="scroll-x">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>When</th>
+              <th>Trigger</th>
+              <th>Result</th>
+              <th class="num hide-sm">HTTP</th>
+              <th class="num hide-sm">Took</th>
+              <th>Detail</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for log in logs %}
+            <tr>
+              <td class="muted mono small" title="{{ log.timestamp|fmt_dt }}">{{ log.timestamp|ago }}</td>
+              <td><span class="badge badge-muted badge-plain">{{ log.trigger }}</span></td>
+              <td>
+                {% if log.result == 'changed' %}
+                  <span class="badge badge-result-changed">Changed</span>
+                {% elif log.result == 'unchanged' %}
+                  <span class="badge badge-result-unchanged">Unchanged</span>
+                {% else %}
+                  <span class="badge badge-result-error">Error</span>
+                {% endif %}
+              </td>
+              <td class="num hide-sm">{{ log.http_status or "—" }}</td>
+              <td class="num hide-sm">{{ "%dms"|format(log.duration_ms) if log.duration_ms is not none else "—" }}</td>
+              <td>
+                {% if log.error_message %}
+                  <span class="error-text">{{ log.error_message }}</span>
+                {% elif log.created_version_id %}
+                  <a href="/versions/{{ log.created_version_id }}">created v{{ log.created_version_id }}</a>
+                {% else %}
+                  <span class="subtle">no change vs prior version</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% if logs|length >= 200 %}
+      <p class="meta small" style="margin-top: 12px;">Showing the most recent 200 entries.</p>
+    {% endif %}
+  {% endif %}
+{% endif %}
+
+{% if tab == 'settings' %}
+  <dl class="spec-list">
+    <dt>URL</dt>
+    <dd>
+      <a class="mono" href="{{ website.url }}" target="_blank" rel="noopener noreferrer">
+        <span class="truncate truncate-lg" title="{{ website.url }}">{{ website.url }}</span>
+      </a>
+    </dd>
+    <dt>Interval</dt>
+    <dd>{{ website.interval_value }} {{ website.interval_unit }} ({{ website.interval_value|humanize_interval(website.interval_unit) }})</dd>
+    <dt>Scan mode</dt>
+    <dd>
+      {% if website.scan_mode == 'raw' %}Raw HTML
+      {% elif website.scan_mode == 'assets' %}HTML + same-origin assets
+      {% else %}Browser-rendered (Playwright){% endif %}
+    </dd>
+    <dt>Status</dt>
+    <dd>{{ "Enabled" if website.enabled else "Disabled" }}</dd>
+    <dt>Ignore whitespace</dt><dd>{{ "Yes" if website.ignore_whitespace else "No" }}</dd>
+    <dt>Ignore timestamps</dt><dd>{{ "Yes" if website.ignore_timestamps else "No" }}</dd>
+    <dt>Ignored CSS selectors</dt>
+    <dd>{% if website.ignore_selectors %}<pre class="mono small">{{ website.ignore_selectors }}</pre>{% else %}<span class="subtle">none</span>{% endif %}</dd>
+    <dt>Ignored URL patterns</dt>
+    <dd>{% if website.ignore_url_patterns %}<pre class="mono small">{{ website.ignore_url_patterns }}</pre>{% else %}<span class="subtle">none</span>{% endif %}</dd>
+    <dt>Created</dt><dd class="muted">{{ website.created_at|fmt_dt }}</dd>
+    <dt>Updated</dt><dd class="muted">{{ website.updated_at|fmt_dt }}</dd>
+  </dl>
+  <div class="form-actions">
+    <a class="btn btn-primary" href="/websites/{{ website.id }}/edit">Edit settings</a>
+  </div>
+{% endif %}
+{% endblock %}

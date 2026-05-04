@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · WebStalker{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Monitored websites</h1>
+    <p class="meta">
+      {% if items %}
+        {{ items|length }} site{{ '' if items|length == 1 else 's' }} tracked.
+      {% else %}
+        Add a site to start watching it for changes.
+      {% endif %}
+    </p>
+  </div>
+  {% if items %}
+  <div class="page-actions">
+    <form method="post" action="/scan-all" data-scan-form>
+      <button class="btn">Scan all now</button>
+    </form>
+    <a class="btn btn-primary" href="/websites/new">Add website</a>
+  </div>
+  {% endif %}
+</div>
+
+{% if not items %}
+  <div class="empty">
+    <div class="empty-inner">
+      <span class="empty-icon" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <h2>Track your first website</h2>
+      <p>Give it a name, a URL, and a scan interval. WebStalker fetches the page right away, saves it as version 1, and notifies you in the dashboard when it changes.</p>
+      <a class="btn btn-primary" href="/websites/new">Add website</a>
+    </div>
+  </div>
+{% else %}
+  <div class="table-wrap">
+    <div class="scroll-x">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Name &amp; URL</th>
+            <th>Status</th>
+            <th class="hide-sm">Interval</th>
+            <th class="hide-sm">Last checked</th>
+            <th class="hide-sm">Last changed</th>
+            <th class="num hide-sm">Versions</th>
+            <th class="row-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for w, count in items %}
+          <tr class="{% if not w.enabled %}is-disabled{% endif %}">
+            <td>
+              <div class="cell-stack">
+                <a href="/websites/{{ w.id }}"><strong>{{ w.name }}</strong></a>
+                <span class="url"><span class="truncate truncate-md" title="{{ w.url }}">{{ w.url }}</span></span>
+              </div>
+            </td>
+            <td>
+              {% if not w.enabled %}
+                <span class="badge badge-disabled">Disabled</span>
+              {% elif w.id in running_ids %}
+                <span class="badge badge-pending">Scanning</span>
+              {% elif w.last_status == 'pending' %}
+                <span class="badge badge-muted">Pending</span>
+              {% elif w.last_status == 'changed' %}
+                <span class="badge badge-changed">Changed</span>
+              {% elif w.last_status == 'error' %}
+                <span class="badge badge-error">Error</span>
+              {% else %}
+                <span class="badge badge-ok">OK</span>
+              {% endif %}
+            </td>
+            <td class="muted hide-sm">{{ w.interval_value|humanize_interval(w.interval_unit) }}</td>
+            <td class="muted hide-sm" title="{{ w.last_checked_at|fmt_dt }}">{{ w.last_checked_at|ago }}</td>
+            <td class="muted hide-sm" title="{{ w.last_changed_at|fmt_dt }}">{{ w.last_changed_at|ago }}</td>
+            <td class="num hide-sm">{{ count }}</td>
+            <td class="row-actions">
+              <form method="post" action="/websites/{{ w.id }}/scan" data-scan-form>
+                <button class="btn btn-sm btn-ghost" title="Run a manual scan">Scan</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

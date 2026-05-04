@@ -1,0 +1,64 @@
+{% set MAX_LINES_PER_FILE = 4000 %}
+{% if not file_diffs %}
+  <div class="empty compact">
+    <div class="empty-inner">
+      <h2>{% if version.parent_version_id %}No file-level differences{% else %}This is the initial version{% endif %}</h2>
+      <p>
+        {% if version.parent_version_id %}
+          The normalized content matched the previous version, so no diff is shown.
+          (If you expected changes here, check the website's ignore rules.)
+        {% else %}
+          There is no previous version to compare against. The full snapshot is available below and via the ZIP download.
+        {% endif %}
+      </p>
+    </div>
+  </div>
+{% else %}
+  {% for f in file_diffs %}
+  <details class="file-diff" {% if loop.index <= 5 and f.lines|length <= 600 %}open{% endif %}>
+    <summary class="file-diff-header">
+      <span class="path">
+        <svg class="chev" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 2l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <span class="truncate truncate-lg" title="{{ f.path }}">{{ f.path }}</span>
+        {% if f.old_blob is none %}<span class="badge badge-result-unchanged badge-plain">added</span>
+        {% elif f.new_blob is none %}<span class="badge badge-result-error badge-plain">removed</span>
+        {% endif %}
+      </span>
+      <span class="diff-stats">
+        <span class="add">+{{ f.additions }}</span>
+        <span class="del">−{{ f.deletions }}</span>
+      </span>
+    </summary>
+
+    {% if f.is_binary %}
+      <div class="file-diff-binary">Binary file changed. Open the ZIP download to inspect it.</div>
+    {% else %}
+      <div class="scroll-x">
+        <table class="diff" role="table">
+          <tbody>
+          {% set ns = namespace(rendered=0, truncated=false) %}
+          {% for line in f.lines %}
+            {% if ns.rendered < MAX_LINES_PER_FILE %}
+              <tr class="diff-row diff-{{ line.kind }}">
+                <td class="diff-num old-num" aria-hidden="true">{{ line.old_no if line.old_no is not none else '' }}</td>
+                <td class="diff-num new-num" aria-hidden="true">{{ line.new_no if line.new_no is not none else '' }}</td>
+                <td class="diff-marker">{% if line.kind == 'added' %}+{% elif line.kind == 'removed' %}-{% elif line.kind == 'hunk' %}@{% else %} {% endif %}</td>
+                <td class="diff-text">{{ line.text }}</td>
+              </tr>
+              {% set ns.rendered = ns.rendered + 1 %}
+            {% else %}
+              {% set ns.truncated = true %}
+            {% endif %}
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if ns.truncated %}
+        <div class="file-diff-truncated">
+          Diff truncated at {{ MAX_LINES_PER_FILE }} lines ({{ f.lines|length - MAX_LINES_PER_FILE }} more not shown). Download the ZIP for the full file.
+        </div>
+      {% endif %}
+    {% endif %}
+  </details>
+  {% endfor %}
+{% endif %}
