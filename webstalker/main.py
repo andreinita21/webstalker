@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -5,7 +6,8 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from . import models, scheduler
+from . import events, models, scheduler
+from .api import events as api_events
 from .api import versions as api_versions
 from .api import websites as api_websites
 from .config import settings
@@ -21,6 +23,7 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    events.set_loop(asyncio.get_running_loop())
     init_db()
     if settings.enable_scheduler:
         scheduler.start_scheduler()
@@ -43,6 +46,7 @@ app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
 app.include_router(api_websites.router)
 app.include_router(api_versions.router)
+app.include_router(api_events.router)
 app.include_router(web_router)
 
 

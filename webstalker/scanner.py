@@ -7,7 +7,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from bs4 import BeautifulSoup
 
-from . import models, normalize, storage
+from . import events, models, normalize, storage
 from .config import settings
 from .db import session_scope
 
@@ -181,6 +181,15 @@ def perform_scan(website_id: int, trigger: str) -> dict:
 
     trigger: one of "added", "startup", "scheduled", "manual".
     """
+    # Load website name + URL up front so every emitted event identifies
+    # the site by name even when locking or DB lookup fails later.
+    with session_scope() as db:
+        w = db.get(models.Website, website_id)
+        if w is None:
+            return {"result": "error", "reason": "website not found"}
+        website_name = w.name
+        website_url = w.url
+
     if not _try_lock(website_id):
         with session_scope() as db:
             db.add(
@@ -191,13 +200,49 @@ def perform_scan(website_id: int, trigger: str) -> dict:
                     error_message="Scan already running for this website; skipped.",
                 )
             )
+        events.publish({
+            "type": "scan.end",
+            "website_id": website_id,
+            "website_name": website_name,
+            "url": website_url,
+            "trigger": trigger,
+            "result": "skipped",
+            "duration_ms": 0,
+            "http_status": None,
+            "error_message": "scan already running",
+            "version_id": None,
+            "version_number": None,
+        })
         return {"result": "skipped", "reason": "already running"}
 
+    events.publish({
+        "type": "scan.start",
+        "website_id": website_id,
+        "website_name": website_name,
+        "url": website_url,
+        "trigger": trigger,
+    })
+
     start = time.monotonic()
+    end_payload: dict = {
+        "type": "scan.end",
+        "website_id": website_id,
+        "website_name": website_name,
+        "url": website_url,
+        "trigger": trigger,
+        "result": "error",
+        "duration_ms": 0,
+        "http_status": None,
+        "error_message": None,
+        "version_id": None,
+        "version_number": None,
+    }
+
     try:
         with session_scope() as db:
             website = db.get(models.Website, website_id)
             if website is None:
+                end_payload["error_message"] = "website not found"
                 return {"result": "error", "reason": "website not found"}
 
             url = website.url
@@ -214,32 +259,46 @@ def perform_scan(website_id: int, trigger: str) -> dict:
                     )
             except httpx.HTTPStatusError as e:
                 duration_ms = int((time.monotonic() - start) * 1000)
+                err_status = e.response.status_code if e.response else None
+                err_msg = f"HTTP {err_status}: {e}" if err_status else f"HTTP error: {e}"
                 db.add(
                     models.VerificationLog(
                         website_id=website_id,
                         trigger=trigger,
                         result="error",
-                        http_status=e.response.status_code if e.response else None,
-                        error_message=f"HTTP {e.response.status_code}: {e}",
+                        http_status=err_status,
+                        error_message=err_msg,
                         duration_ms=duration_ms,
                     )
                 )
                 website.last_checked_at = _utcnow()
                 website.last_status = "error"
+                end_payload.update(
+                    result="error",
+                    duration_ms=duration_ms,
+                    http_status=err_status,
+                    error_message=err_msg,
+                )
                 return {"result": "error", "reason": str(e)}
             except Exception as e:
                 duration_ms = int((time.monotonic() - start) * 1000)
+                err_msg = f"{type(e).__name__}: {e}"
                 db.add(
                     models.VerificationLog(
                         website_id=website_id,
                         trigger=trigger,
                         result="error",
-                        error_message=f"{type(e).__name__}: {e}",
+                        error_message=err_msg,
                         duration_ms=duration_ms,
                     )
                 )
                 website.last_checked_at = _utcnow()
                 website.last_status = "error"
+                end_payload.update(
+                    result="error",
+                    duration_ms=duration_ms,
+                    error_message=err_msg,
+                )
                 return {"result": "error", "reason": str(e)}
 
             normalized = _normalize_for_hash(website, html)
@@ -267,6 +326,13 @@ def perform_scan(website_id: int, trigger: str) -> dict:
                 )
                 website.last_checked_at = _utcnow()
                 website.last_status = "ok"
+                end_payload.update(
+                    result="unchanged",
+                    duration_ms=duration_ms,
+                    http_status=status_code,
+                    version_id=latest.id,
+                    version_number=latest.version_number,
+                )
                 return {"result": "unchanged", "version_id": latest.id}
 
             html_bytes = html.encode("utf-8")
@@ -347,6 +413,14 @@ def perform_scan(website_id: int, trigger: str) -> dict:
             website.last_checked_at = _utcnow()
             website.last_changed_at = _utcnow()
             website.last_status = "changed" if latest else "ok"
+            end_payload.update(
+                result="changed",
+                duration_ms=duration_ms,
+                http_status=status_code,
+                version_id=version.id,
+                version_number=new_number,
+            )
             return {"result": "changed", "version_id": version.id}
     finally:
         _unlock(website_id)
+        events.publish(end_payload)

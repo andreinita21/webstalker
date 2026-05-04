@@ -2,7 +2,7 @@
 {% block title %}{{ website.name }} · WebStalker{% endblock %}
 
 {% block content %}
-<div class="page-header">
+<div class="page-header" data-website-id="{{ website.id }}">
   <div style="min-width: 0;">
     <p class="breadcrumbs">
       <a href="/">Dashboard</a>
@@ -12,17 +12,17 @@
     <h1>
       <span style="min-width: 0;" class="truncate truncate-lg" title="{{ website.name }}">{{ website.name }}</span>
       {% if not website.enabled %}
-        <span class="badge badge-disabled">Disabled</span>
+        <span class="badge badge-disabled" data-status-badge>Disabled</span>
       {% elif is_scanning %}
-        <span class="badge badge-pending">Scanning</span>
+        <span class="badge badge-pending" data-status-badge>Scanning</span>
       {% elif website.last_status == 'pending' %}
-        <span class="badge badge-muted">Pending</span>
+        <span class="badge badge-muted" data-status-badge>Pending</span>
       {% elif website.last_status == 'changed' %}
-        <span class="badge badge-changed">Changed</span>
+        <span class="badge badge-changed" data-status-badge>Changed</span>
       {% elif website.last_status == 'error' %}
-        <span class="badge badge-error">Error</span>
+        <span class="badge badge-error" data-status-badge>Error</span>
       {% else %}
-        <span class="badge badge-ok">OK</span>
+        <span class="badge badge-ok" data-status-badge>OK</span>
       {% endif %}
     </h1>
     <p class="meta">
@@ -178,6 +178,16 @@
       <p class="meta small" style="margin-top: 12px;">Showing the most recent 200 entries.</p>
     {% endif %}
   {% endif %}
+
+  <section class="activity" aria-label="Live scan activity for this website">
+    <header class="activity-header">
+      <h3>Live activity <span class="activity-hint">(events for {{ website.name }} only)</span></h3>
+      <span id="activity-status" class="activity-status">connecting…</span>
+    </header>
+    <div id="activity-stream" class="activity-stream" data-website-filter="{{ website.id }}">
+      <div class="activity-empty">No live events for this site yet. Scans run in the background, even if you close this tab.</div>
+    </div>
+  </section>
 {% endif %}
 
 {% if tab == 'settings' %}

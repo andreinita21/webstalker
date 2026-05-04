@@ -54,7 +54,7 @@
         </thead>
         <tbody>
           {% for w, count in items %}
-          <tr class="{% if not w.enabled %}is-disabled{% endif %}">
+          <tr class="{% if not w.enabled %}is-disabled{% endif %}" data-website-id="{{ w.id }}">
             <td>
               <div class="cell-stack">
                 <a href="/websites/{{ w.id }}"><strong>{{ w.name }}</strong></a>
@@ -63,17 +63,17 @@
             </td>
             <td>
               {% if not w.enabled %}
-                <span class="badge badge-disabled">Disabled</span>
+                <span class="badge badge-disabled" data-status-badge>Disabled</span>
               {% elif w.id in running_ids %}
-                <span class="badge badge-pending">Scanning</span>
+                <span class="badge badge-pending" data-status-badge>Scanning</span>
               {% elif w.last_status == 'pending' %}
-                <span class="badge badge-muted">Pending</span>
+                <span class="badge badge-muted" data-status-badge>Pending</span>
               {% elif w.last_status == 'changed' %}
-                <span class="badge badge-changed">Changed</span>
+                <span class="badge badge-changed" data-status-badge>Changed</span>
               {% elif w.last_status == 'error' %}
-                <span class="badge badge-error">Error</span>
+                <span class="badge badge-error" data-status-badge>Error</span>
               {% else %}
-                <span class="badge badge-ok">OK</span>
+                <span class="badge badge-ok" data-status-badge>OK</span>
               {% endif %}
             </td>
             <td class="muted hide-sm">{{ w.interval_value|humanize_interval(w.interval_unit) }}</td>
@@ -92,4 +92,16 @@
     </div>
   </div>
 {% endif %}
+
+<section class="activity" aria-label="Live scan activity">
+  <header class="activity-header">
+    <h3>Live activity <span class="activity-hint">(scans run in the background, even if you close this tab)</span></h3>
+    <span id="activity-status" class="activity-status">connecting…</span>
+  </header>
+  <div id="activity-stream" class="activity-stream">
+    <div class="activity-empty">
+      No activity yet. Manual or scheduled scans will appear here in real time.
+    </div>
+  </div>
+</section>
 {% endblock %}
